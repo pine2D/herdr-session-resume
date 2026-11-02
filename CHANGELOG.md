@@ -24,5 +24,6 @@ First release: when a Herdr terminal is restored after herdr-core stops, WSL shu
 - Options that skip permission prompts or the sandbox are dropped by default; set `HERDR_RESUME_ALLOW_DANGEROUS=1` to carry them over.
 - Record files are readable and writable only by the current user; prompts and the values of dropped options are never written to disk.
 - Sessions whose ID, directory, or options contain control characters are neither recorded nor resumed, which prevents injected commands.
+- Terminal labels and other external text in the resume prompt are printed verbatim, so `$(...)` in a tab name is never executed, even with `PROMPT_SUBST` enabled.
 
 [Unreleased]: https://github.com/pine2D/herdr-session-resume/commits/main

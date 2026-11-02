@@ -225,6 +225,36 @@ class LifecycleTest(unittest.TestCase):
         self.assertTrue(self.path().exists())
 
 
+class ZshSnippetTest(unittest.TestCase):
+    ROOT = Path(__file__).resolve().parent.parent
+
+    def test_description_is_not_expanded(self):
+        """描述里的 $(...)、%F 等在 PROMPT_SUBST 下也不得展开或执行。"""
+        import shutil
+        import subprocess
+        if not shutil.which("zsh"):
+            self.skipTest("zsh 不可用")
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            marker = tmp / "pwned"
+            (tmp / "state" / "default").mkdir(parents=True)
+            (tmp / "state" / "default" / "t1.json").write_text("{}")
+            fake = tmp / "fake-claim"
+            desc = f"x $(touch {marker}) %F{{red}}"
+            fake.write_text("#!/bin/sh\nprintf '%s\\0%s\\0%s\\0%s' "
+                            f"'{desc}' '{tmp}' 'claude --resume S1' confirm\n")
+            fake.chmod(0o755)
+            script = (f"setopt prompt_subst; source {self.ROOT / 'herdr-resume.zsh'}; "
+                      "_herdr_resume_precmd")
+            env = {**os.environ, "HC_TERMINAL_ID": "t1", "HERDR_RESUME_STATE": str(tmp / "state"),
+                   "HERDR_RESUME_BIN": str(fake)}
+            env.pop("HC_SESSION", None)
+            out = subprocess.run(["zsh", "-f", "-i", "-c", script], capture_output=True,
+                                 text=True, env=env, timeout=20)
+            self.assertFalse(marker.exists(), "描述中的命令替换被执行了")
+            self.assertIn("%F{red}", out.stdout + out.stderr)
+
+
 class CliHelpTest(unittest.TestCase):
     ROOT = Path(__file__).resolve().parent.parent
 

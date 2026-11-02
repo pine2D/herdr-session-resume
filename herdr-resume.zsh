@@ -29,13 +29,18 @@ _herdr_resume_precmd() {
     print -u2 -r -- "[herdr-resume] 目录已不存在：$dir"
     how=confirm
   fi
+  # 只有固定前缀走 print -P；desc 来自终端标签等外部文本，必须用 print -r 原样输出，
+  # 否则在 PROMPT_SUBST 打开时（oh-my-zsh 默认）其中的 $(...) 会被执行。
   if [[ $how == confirm ]]; then
-    print -P -- "%F{cyan}[herdr-resume]%f ${desc//\%/%%} —— 命令已填入，Enter 执行，Ctrl-U 放弃"
+    print -nP -- '%F{cyan}[herdr-resume]%f '
+    print -r -- "$desc —— 命令已填入，Enter 执行，Ctrl-U 放弃"
     print -z -r -- "$cmd"
     return 0
   fi
   local delay=${HERDR_RESUME_DELAY:-3}
-  print -nP -- "%F{cyan}[herdr-resume]%f ${desc//\%/%%} —— ${delay} 秒后恢复（Enter 立即，n/Esc 跳过）"
+  [[ $delay == <1-60> ]] || delay=3
+  print -nP -- '%F{cyan}[herdr-resume]%f '
+  print -nr -- "$desc —— ${delay} 秒后恢复（Enter 立即，n/Esc 跳过）"
   read -s -t "$delay" -k 1 key
   print
   if [[ $key == [nN] || $key == $'\e' ]]; then
