@@ -121,5 +121,5 @@ MIT（见 `LICENSE`）。引入外部代码或参考实现前，确认其许可�
 - README 写给使用者：解决什么、效果、安装、设置、限制、排查。不写实现细节和开发流程。
 - README 维护两种语言：`README.md` 为英文（默认），`README.zh-CN.md` 为简体中文，顶部互链。两份事实、命令、表格行必须一一对应，任何改动在同一个提交里同步；各自按本语言习惯行文，不逐句直译。
 - 行为、参数白名单或支持的 agent 有变化时，同步更新两份 README 的「Supported agents / 支持的 agent」「Known limitations / 已知限制」，以及本文件的「实测事实」「兼容版本」和 CHANGELOG。
-- 工具在终端里打印的提示目前只有中文；如果改成双语，README 里的输出示例要一并更新。
+- 终端提示和 `--help` 有中英两套：Python 侧在 `MESSAGES` / `HELP` 里成对维护（测试会核对两边的键一致），zsh 和 `install.sh` 侧用 `_herdr_resume_zh` / `is_zh` 分支。三处的语言判断规则必须一致：`HERDR_RESUME_LANG` 优先，其次 `LC_ALL` > `LC_MESSAGES` > `LANG`，只有在结果不是 C/POSIX 时才看 `LANGUAGE`。日志文件和状态文件只用英文。改动提示文字时，同步更新 README 里的输出示例。
 - CLAUDE.md 是维护者文档，用中文。

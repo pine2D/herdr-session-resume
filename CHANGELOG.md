@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-03
+
 First release: when a Herdr terminal is restored after herdr-core stops, WSL shuts down, or the system reboots, the agent session that was running in it resumes automatically.
 
 ### Added
@@ -17,6 +19,8 @@ First release: when a Herdr terminal is restored after herdr-core stops, WSL shu
 - Carry over allowlisted launch options, such as `--model` and `--permission-mode` for Claude Code, and `-m` and `-c` for Codex.
 - Sessions you quit yourself (`/exit`, Ctrl-D) are not brought back after a restart.
 - Add `herdr-resume status` and `herdr-resume snapshot --dry-run` to inspect recorded sessions and preview what would be recorded.
+- Show messages and `--help` in English, or in Chinese when the locale is Chinese; override with `HERDR_RESUME_LANG=en|zh`.
+- Add `herdr-resume --version`.
 - Add `install.sh` to link the command and enable the user service, with `--dry-run` and `--uninstall`; it never edits shell configuration.
 
 ### Security
@@ -26,4 +30,5 @@ First release: when a Herdr terminal is restored after herdr-core stops, WSL shu
 - Sessions whose ID, directory, or options contain control characters are neither recorded nor resumed, which prevents injected commands.
 - Terminal labels and other external text in the resume prompt are printed verbatim, so `$(...)` in a tab name is never executed, even with `PROMPT_SUBST` enabled.
 
-[Unreleased]: https://github.com/pine2D/herdr-session-resume/commits/main
+[Unreleased]: https://github.com/pine2D/herdr-session-resume/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/pine2D/herdr-session-resume/releases/tag/v0.1.0

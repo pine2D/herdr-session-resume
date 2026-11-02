@@ -257,28 +257,68 @@ class ZshSnippetTest(unittest.TestCase):
 
 class CliHelpTest(unittest.TestCase):
     ROOT = Path(__file__).resolve().parent.parent
+    SECTIONS = {"en": ("Usage:", "Examples:", "Side effects:", "Exit status:"),
+                "zh": ("用法：", "示例：", "副作用：", "退出状态：")}
 
-    def run_cli(self, *argv):
+    def run_cli(self, lang, *argv):
         import subprocess
-        return subprocess.run(["bash", *argv], cwd=self.ROOT, capture_output=True, text=True,
-                              env={**os.environ, "HOME": tempfile.gettempdir() + "/hr-nohome"})
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("LC_ALL", "LC_MESSAGES", "LANGUAGE", "HERDR_RESUME_LANG")}
+        env.update(HOME=tempfile.gettempdir() + "/hr-nohome",
+                   LANG="zh_CN.UTF-8" if lang == "zh" else "C.UTF-8")
+        return subprocess.run(["bash", *argv], cwd=self.ROOT, capture_output=True, text=True, env=env)
 
     def test_entry_and_installer_help_contract(self):
         for script in ("herdr-resume", "install.sh"):
-            ok = self.run_cli(script, "--help")
-            self.assertEqual(ok.returncode, 0, script)
-            for needle in ("用法：", "示例：", "副作用：", "退出状态："):
-                self.assertIn(needle, ok.stdout, script)
-            self.assertEqual(self.run_cli(script, "--help", "extra").returncode, 2, script)
+            for lang, needles in self.SECTIONS.items():
+                ok = self.run_cli(lang, script, "--help")
+                self.assertEqual(ok.returncode, 0, (script, lang))
+                for needle in needles:
+                    self.assertIn(needle, ok.stdout, (script, lang))
+            self.assertEqual(self.run_cli("en", script, "--help", "extra").returncode, 2, script)
+
+    def test_version(self):
+        out = self.run_cli("en", "herdr-resume", "--version")
+        self.assertEqual(out.stdout.strip(), f"herdr-resume {hr.__version__}")
+
+
+class LangTest(unittest.TestCase):
+    CASES = [
+        ({"LANG": "C.UTF-8"}, "en"),
+        ({"LANG": "zh_CN.UTF-8"}, "zh"),
+        ({"LANG": "en_US.UTF-8", "LC_ALL": "zh_TW.UTF-8"}, "zh"),
+        ({"LANG": "zh_CN.UTF-8", "LC_MESSAGES": "en_US.UTF-8"}, "en"),
+        ({"LANG": "C.UTF-8", "LANGUAGE": "zh_CN"}, "en"),
+        ({"LANG": "en_US.UTF-8", "LANGUAGE": "zh_CN:en"}, "zh"),
+        ({"LANG": "zh_CN.UTF-8", "HERDR_RESUME_LANG": "en"}, "en"),
+        ({"LANG": "C.UTF-8", "HERDR_RESUME_LANG": "zh"}, "zh"),
+        ({}, "en"),
+    ]
+
+    def test_detection(self):
+        keys = ("LANG", "LC_ALL", "LC_MESSAGES", "LANGUAGE", "HERDR_RESUME_LANG")
+        for env, want in self.CASES:
+            clean = {k: v for k, v in os.environ.items() if k not in keys}
+            with mock.patch.dict(os.environ, {**clean, **env}, clear=True):
+                self.assertEqual(hr.lang(), want, env)
+
+    def test_messages_in_both_languages(self):
+        self.assertEqual(set(hr.MESSAGES["en"]), set(hr.MESSAGES["zh"]))
+        for lang, want in (("en", "claude session abcdef12 (w / x)"),
+                           ("zh", "claude 会话 abcdef12（w / x）")):
+            with mock.patch.dict(os.environ, {"HERDR_RESUME_LANG": lang}):
+                desc = hr.t("desc", agent="claude", sid="abcdef12", where=hr.t("where", where="w / x"))
+            self.assertEqual(desc, want)
 
 
 class HelpTest(unittest.TestCase):
     def test_help(self):
-        out = io.StringIO()
-        with redirect_stdout(out):
-            self.assertEqual(hr.main(["--help"]), 0)
-        for needle in ("用法：", "示例：", "副作用：", "退出状态："):
-            self.assertIn(needle, out.getvalue())
+        for lang, needles in CliHelpTest.SECTIONS.items():
+            out = io.StringIO()
+            with mock.patch.dict(os.environ, {"HERDR_RESUME_LANG": lang}), redirect_stdout(out):
+                self.assertEqual(hr.main(["--help"]), 0)
+            for needle in needles:
+                self.assertIn(needle, out.getvalue())
 
 
 if __name__ == "__main__":

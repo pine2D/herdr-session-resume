@@ -11,6 +11,8 @@ Herdr 重启后会恢复空间、标签页和分屏，但每个终端里原来�
 $ claude --resume e9636db5-3a61-4787-b2be-9d2bfb84d9b7 --model opus --permission-mode auto
 ```
 
+系统语言为中文时显示中文提示，其他情况显示英文。
+
 ## 适用场景
 
 | 情况 | 结果 |
@@ -70,7 +72,8 @@ herdr-resume status
 | 变量 | 默认 | 作用 |
 |---|---|---|
 | `HERDR_RESUME_MODE` | `auto` | `auto`：倒计时后自动执行；`confirm`：只把命令填进命令行，按 Enter 才执行；`off`：关闭 |
-| `HERDR_RESUME_DELAY` | `3` | 倒计时秒数 |
+| `HERDR_RESUME_DELAY` | `3` | 倒计时秒数（1–60） |
+| `HERDR_RESUME_LANG` | 按系统语言 | `en` 或 `zh`。默认在 `LC_ALL`、`LC_MESSAGES` 或 `LANG` 以 `zh` 开头时显示中文，否则显示英文 |
 | `HERDR_RESUME_ALLOW_DANGEROUS` | 未设置 | 设为 `1` 时连跳过权限、沙箱的参数也一起带回。必须写进服务环境（`systemctl --user edit herdr-resume.service`）才生效 |
 
 ## 已知限制

@@ -7,6 +7,16 @@
 typeset -g _herdr_resume_first=1 _herdr_resume_pending=
 typeset -g _herdr_resume_file="${HERDR_RESUME_STATE:-$HOME/.local/state/herdr-resume}/${HC_SESSION:-default}/${HC_TERMINAL_ID}.json"
 
+# 界面语言：与 herdr_resume.py 的 lang() 规则一致
+_herdr_resume_zh() {
+  local v=${HERDR_RESUME_LANG-}
+  if [[ -z $v ]]; then
+    v=${LC_ALL:-${LC_MESSAGES:-${LANG-}}}
+    [[ -n ${LANGUAGE-} && -n $v && $v != (C|POSIX|C.*) ]] && v=${LANGUAGE%%:*}
+  fi
+  [[ ${v:l} == zh* ]]
+}
+
 _herdr_resume_precmd() {
   if (( ! _herdr_resume_first )); then
     # 提示符回来说明本 shell 启动的 agent 已退出：属于本 shell 的条目立即作废，
@@ -23,30 +33,47 @@ _herdr_resume_precmd() {
   r=("${(@0)$("${HERDR_RESUME_BIN:-$HOME/.local/bin/herdr-resume}" claim \
       --terminal "$HC_TERMINAL_ID" --shell-pid $$ 2>/dev/null)}")
   (( ${#r} == 4 )) || return 0
-  local desc=$r[1] dir=$r[2] cmd=$r[3] how=$r[4] key=
+  local desc=$r[1] dir=$r[2] cmd=$r[3] how=$r[4] key= zh=0
+  _herdr_resume_zh && zh=1
   [[ ${HERDR_RESUME_MODE:-auto} == confirm ]] && how=confirm
   if ! builtin cd -q -- "$dir" 2>/dev/null; then
-    print -u2 -r -- "[herdr-resume] 目录已不存在：$dir"
+    if (( zh )); then
+      print -u2 -r -- "[herdr-resume] 目录已不存在：$dir"
+    else
+      print -u2 -r -- "[herdr-resume] Directory no longer exists: $dir"
+    fi
     how=confirm
   fi
   # 只有固定前缀走 print -P；desc 来自终端标签等外部文本，必须用 print -r 原样输出，
   # 否则在 PROMPT_SUBST 打开时（oh-my-zsh 默认）其中的 $(...) 会被执行。
   if [[ $how == confirm ]]; then
     print -nP -- '%F{cyan}[herdr-resume]%f '
-    print -r -- "$desc —— 命令已填入，Enter 执行，Ctrl-U 放弃"
+    if (( zh )); then
+      print -r -- "$desc —— 命令已填入，Enter 执行，Ctrl-U 放弃"
+    else
+      print -r -- "$desc — command is on the command line; press Enter to run it, Ctrl-U to discard"
+    fi
     print -z -r -- "$cmd"
     return 0
   fi
   local delay=${HERDR_RESUME_DELAY:-3}
   [[ $delay == <1-60> ]] || delay=3
   print -nP -- '%F{cyan}[herdr-resume]%f '
-  print -nr -- "$desc —— ${delay} 秒后恢复（Enter 立即，n/Esc 跳过）"
+  if (( zh )); then
+    print -nr -- "$desc —— ${delay} 秒后恢复（Enter 立即，n/Esc 跳过）"
+  else
+    print -nr -- "$desc — resuming in ${delay}s (Enter: now, n/Esc: skip)"
+  fi
   read -s -t "$delay" -k 1 key
   print
   if [[ $key == [nN] || $key == $'\e' ]]; then
     command rm -f -- $_herdr_resume_file
     print -s -r -- "$cmd"
-    print -r -- "[herdr-resume] 已跳过；恢复命令在历史里（↑）"
+    if (( zh )); then
+      print -r -- "[herdr-resume] 已跳过；恢复命令在历史里（↑）"
+    else
+      print -r -- "[herdr-resume] Skipped; the resume command is in your history (↑)"
+    fi
     return 0
   fi
   _herdr_resume_pending=$cmd

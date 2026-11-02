@@ -23,6 +23,7 @@ import sys
 import time
 from pathlib import Path
 
+__version__ = "0.1.0"
 VERSION = 1
 PENDING_TTL = 7 * 86400
 CLAIM_GRACE = 120
@@ -65,6 +66,58 @@ ARG_SPECS = {
 
 class HcError(RuntimeError):
     pass
+
+
+# ---------- 界面语言 ----------
+
+MESSAGES = {
+    "en": {
+        "core_not_running": "core is not running ({sock})",
+        "not_json": "output is not JSON",
+        "unreachable": "core unreachable",
+        "recovered": "recovered",
+        "desc": "{agent} session {sid}{where}",
+        "where": " ({where})",
+        "ambiguous": ": several Codex sessions share this directory; pick one from the list",
+        "status_dir": "State directory: {sd}",
+        "no_entries": "(no entries)",
+        "running": "running",
+        "pending": "pending",
+        "dropped": "\tDropped options: {opts}",
+        "help_extra": "herdr-resume: --help takes no other arguments",
+    },
+    "zh": {
+        "core_not_running": "core 未运行（{sock}）",
+        "not_json": "输出不是 JSON",
+        "unreachable": "core 不可达",
+        "recovered": "恢复正常",
+        "desc": "{agent} 会话 {sid}{where}",
+        "where": "（{where}）",
+        "ambiguous": "：同目录有多个 Codex，需在列表里选",
+        "status_dir": "状态目录：{sd}",
+        "no_entries": "（无条目）",
+        "running": "运行中",
+        "pending": "待恢复",
+        "dropped": "\t已丢弃参数：{opts}",
+        "help_extra": "herdr-resume: --help 不接受其他参数",
+    },
+}
+
+
+def lang() -> str:
+    """HERDR_RESUME_LANG 优先；否则按 LC_ALL > LC_MESSAGES > LANG，非 C/POSIX 时再看 LANGUAGE。"""
+    value = os.environ.get("HERDR_RESUME_LANG", "")
+    if not value:
+        value = (os.environ.get("LC_ALL") or os.environ.get("LC_MESSAGES")
+                 or os.environ.get("LANG") or "")
+        language = os.environ.get("LANGUAGE", "")
+        if language and value and value != "POSIX" and value != "C" and not value.startswith("C."):
+            value = language.split(":")[0]
+    return "zh" if value.lower().startswith("zh") else "en"
+
+
+def t(key: str, **kw) -> str:
+    return MESSAGES[lang()][key].format(**kw)
 
 
 # ---------- 环境与进程 ----------
@@ -132,7 +185,7 @@ def hc(*args):
     try:
         data = json.loads(out.stdout or "null")
     except json.JSONDecodeError as exc:
-        raise HcError(f"hc {' '.join(args)}: 输出不是 JSON") from exc
+        raise HcError(f"hc {' '.join(args)}: {t('not_json')}") from exc
     if out.returncode != 0 or not isinstance(data, dict) or "error" in data:
         msg = (data or {}).get("error", {}).get("message") if isinstance(data, dict) else None
         raise HcError(f"hc {' '.join(args)}: {msg or out.stderr.strip() or out.returncode}")
@@ -335,7 +388,7 @@ def dropped_names(dropped):
     """只记录被丢弃的选项名，不落盘取值和位置参数（可能是提示词正文）。"""
     names = sorted({a.partition("=")[0] for a in dropped if a.startswith("-")})
     if any(not a.startswith("-") for a in dropped):
-        names.append("<位置参数/选项值>")
+        names.append("<positional/value>")
     return names
 
 
@@ -350,7 +403,7 @@ def build_entry(terminal, detail, codex_cwds):
     if not resolved:
         return None
     if not safe_fields(resolved["session_id"], resolved["cwd"], kept):
-        log(f"skip {terminal} {agent}: 会话 ID、目录或参数含非法字符")
+        log(f"skip {terminal} {agent}: invalid characters in session ID, directory, or options")
         return None
     ambiguous = agent == "codex" and codex_cwds.get(resolved["cwd"], 0) > 1
     shell_pid = detail.get("pid")
@@ -400,7 +453,7 @@ def cmd_snapshot(args) -> int:
     try:
         # core 未运行时不调用 hc，免得开机后抢在 Herdr App 之前拉起 core 和全部会话
         if not core_running():
-            raise HcError(f"core 未运行（{core_socket()}）")
+            raise HcError(t("core_not_running", sock=core_socket()))
         live = {t["address"]: t for t in hc("ls")["terminals"] if t.get("state") == "live"}
         details = {addr: hc("get", addr) for addr in live}
     except HcError as exc:
@@ -460,11 +513,11 @@ def cmd_watch(args) -> int:
         err = None
         try:
             rc = cmd_snapshot(argparse.Namespace(dry_run=False, quiet=True))
-            err = None if rc == 0 else "core 不可达"
+            err = None if rc == 0 else t("unreachable")
         except Exception as exc:  # 单轮失败不退出循环
             err = f"{type(exc).__name__}: {exc}"
         if err != last_err:
-            print(f"herdr-resume: {err or '恢复正常'}", file=sys.stderr, flush=True)
+            print(f"herdr-resume: {err or t('recovered')}", file=sys.stderr, flush=True)
             last_err = err
         time.sleep(args.interval)
 
@@ -498,10 +551,10 @@ def cmd_claim(args) -> int:
             log(f"claim {args.terminal} {entry['agent']} {entry['session_id']}")
     if not safe_fields(entry.get("session_id"), entry.get("cwd"), entry.get("command") or []):
         return 1
-    where = CONTROL_RE.sub("", f"（{entry['where']}）") if entry.get("where") else ""
-    desc = f"{entry['agent']} 会话 {entry['session_id'][:8]}{where}"
+    where = CONTROL_RE.sub("", t("where", where=entry["where"])) if entry.get("where") else ""
+    desc = t("desc", agent=entry["agent"], sid=entry["session_id"][:8], where=where)
     if entry.get("ambiguous"):
-        desc += "：同目录有多个 Codex，需在列表里选"
+        desc += t("ambiguous")
     # NUL 分隔：zsh 侧用 ${(0)...} 拆分，任何字段都无法伪造出额外的一段
     sys.stdout.write("\0".join([desc, entry["cwd"], shlex.join(entry["command"]),
                                 "confirm" if entry.get("ambiguous") else "auto"]))
@@ -514,19 +567,52 @@ def cmd_status(args) -> int:
     if args.json:
         print(json.dumps(entries, ensure_ascii=False, indent=1))
         return 0
-    print(f"状态目录：{sd}")
+    print(t("status_dir", sd=sd))
     if not entries:
-        print("（无条目）")
+        print(t("no_entries"))
     for e in entries:
-        state = "运行中" if alive(e.get("agent_pid"), e.get("agent_start"), e.get("boot_id")) else "待恢复"
+        running = alive(e.get("agent_pid"), e.get("agent_start"), e.get("boot_id"))
+        state = t("running") if running else t("pending")
         print(f"{e.get('terminal')}\t{e.get('agent')}\t{state}\t{e.get('cwd', '')}\t"
               f"{shlex.join(e.get('command') or [])}")
         if e.get("dropped"):
-            print(f"\t已丢弃参数：{shlex.join(e['dropped'])}")
+            print(t("dropped", opts=shlex.join(e["dropped"])))
     return 0
 
 
-HELP = """\
+HELP = {"en": """\
+herdr-resume — resume Claude Code / Codex / Pi sessions in restored Herdr terminals
+
+Usage:
+  herdr-resume snapshot [--dry-run]   record the agent session of each terminal once
+  herdr-resume watch [--interval 15]  snapshot in a loop (run by herdr-resume.service)
+  herdr-resume status [--json]        show recorded entries
+  herdr-resume claim --terminal tN --shell-pid PID [--dry-run]
+                                      called by the zsh snippet before the first prompt
+  herdr-resume --version
+  herdr-resume --help
+
+Environment:
+  HERDR_RESUME_STATE            state root (default ~/.local/state/herdr-resume)
+  HC_SESSION                    herdr-core session name (default: default)
+  HERDR_RESUME_ALLOW_DANGEROUS  1 = keep options that skip permissions/sandbox (dropped by default)
+  HERDR_RESUME_MODE             zsh: auto (default, run after countdown) | confirm | off
+  HERDR_RESUME_DELAY            zsh: countdown in seconds, 1-60 (default 3)
+  HERDR_RESUME_LANG             en | zh (default: from LC_ALL / LC_MESSAGES / LANG)
+
+Examples:
+  herdr-resume status
+  herdr-resume snapshot --dry-run
+
+Side effects:
+  snapshot/watch call hc ls/get, read Claude/Codex/Pi session metadata, and write the
+  state directory and log; claim reassigns an entry to the calling shell.
+  --dry-run, status, --version, and --help write nothing.
+
+Exit status:
+  0  success (claim: a resumable session was printed); 1  core unreachable or nothing
+  to resume; 2  usage error.
+""", "zh": """\
 herdr-resume — herdr 终端恢复后自动续上原 Claude Code / Codex / Pi 会话
 
 用法：
@@ -534,7 +620,8 @@ herdr-resume — herdr 终端恢复后自动续上原 Claude Code / Codex / Pi �
   herdr-resume watch [--interval 15]  常驻循环快照（herdr-resume.service 调用）
   herdr-resume status [--json]        查看已记录的条目
   herdr-resume claim --terminal tN --shell-pid PID [--dry-run]
-                                         由 zsh 片段在新 shell 首个提示符前调用
+                                      由 zsh 片段在新 shell 首个提示符前调用
+  herdr-resume --version
   herdr-resume --help
 
 环境变量：
@@ -542,7 +629,8 @@ herdr-resume — herdr 终端恢复后自动续上原 Claude Code / Codex / Pi �
   HC_SESSION                    herdr-core 会话名（默认 default）
   HERDR_RESUME_ALLOW_DANGEROUS  设为 1 时保留跳过权限/沙箱类参数（默认丢弃）
   HERDR_RESUME_MODE             zsh 侧：auto（默认，倒计时后执行）| confirm | off
-  HERDR_RESUME_DELAY            zsh 侧：倒计时秒数（默认 3）
+  HERDR_RESUME_DELAY            zsh 侧：倒计时秒数，1–60（默认 3）
+  HERDR_RESUME_LANG             en | zh（默认按 LC_ALL / LC_MESSAGES / LANG 判断）
 
 示例：
   herdr-resume status
@@ -550,21 +638,26 @@ herdr-resume — herdr 终端恢复后自动续上原 Claude Code / Codex / Pi �
 
 副作用：
   snapshot/watch 调用 hc ls/get，只读 Claude/Codex/Pi 会话元数据，写状态目录与日志；
-  claim 把条目改归调用它的 shell。--dry-run、status、--help 不写任何文件。
+  claim 把条目改归调用它的 shell。--dry-run、status、--version、--help 不写任何文件。
 
 退出状态：
   0  成功（claim：有可恢复会话并已输出）；1  core 不可达或无可恢复会话；2  参数错误。
-"""
+"""}
 
 
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     os.umask(0o077)
+    if argv and argv[0] in ("-V", "--version"):
+        if len(argv) > 1:
+            return 2
+        print(f"herdr-resume {__version__}")
+        return 0
     if not argv or argv[0] in ("-h", "--help"):
         if len(argv) > 1:
-            print("herdr-resume: --help 不接受其他参数", file=sys.stderr)
+            print(t("help_extra"), file=sys.stderr)
             return 2
-        print(HELP, end="", file=sys.stdout if argv else sys.stderr)
+        print(HELP[lang()], end="", file=sys.stdout if argv else sys.stderr)
         return 0 if argv else 2
     parser = argparse.ArgumentParser(prog="herdr-resume", add_help=False)
     sub = parser.add_subparsers(dest="cmd", required=True)

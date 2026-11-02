@@ -7,11 +7,11 @@ Bring your Claude Code, Codex, and Pi sessions back after a [Herdr](https://herd
 When Herdr restarts, it restores your spaces, tabs, and splits, but every terminal comes back as an empty shell: the agent that was running there is gone, and you have to `--resume` each one by hand. herdr-resume remembers which session each terminal was running. When the terminal is restored, it changes to the original directory and resumes the same conversation with the original launch options:
 
 ```text
-[herdr-resume] claude 会话 e9636db5（work / api） —— 3 秒后恢复（Enter 立即，n/Esc 跳过）
+[herdr-resume] claude session e9636db5 (work / api) — resuming in 3s (Enter: now, n/Esc: skip)
 $ claude --resume e9636db5-3a61-4787-b2be-9d2bfb84d9b7 --model opus --permission-mode auto
 ```
 
-The prompt above says: resuming in 3 seconds; press Enter to resume now, or `n`/`Esc` to skip. Status messages are currently printed in Chinese only.
+Messages are in English, or in Chinese when your locale is Chinese.
 
 ## When it applies
 
@@ -72,7 +72,8 @@ Set these environment variables in `~/.zshrc` before the `source` line:
 | Variable | Default | Effect |
 |---|---|---|
 | `HERDR_RESUME_MODE` | `auto` | `auto`: run the resume command after the countdown. `confirm`: only put the command on the command line; press Enter to run it. `off`: disable resuming |
-| `HERDR_RESUME_DELAY` | `3` | Countdown length in seconds |
+| `HERDR_RESUME_DELAY` | `3` | Countdown length in seconds (1–60) |
+| `HERDR_RESUME_LANG` | from locale | `en` or `zh`. By default, Chinese is used when `LC_ALL`, `LC_MESSAGES`, or `LANG` starts with `zh`; otherwise English |
 | `HERDR_RESUME_ALLOW_DANGEROUS` | unset | Set to `1` to also carry over options that skip permission prompts or the sandbox. It only takes effect in the service environment (`systemctl --user edit herdr-resume.service`) |
 
 ## Known limitations
