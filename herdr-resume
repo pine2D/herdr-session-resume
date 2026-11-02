@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# 命令入口：解析符号链接，调用仓库内的 herdr_resume.py。
+set -euo pipefail
+
+script_path=$(readlink -f -- "${BASH_SOURCE[0]}")
+exec python3 -B "$(dirname -- "$script_path")/herdr_resume.py" "$@"

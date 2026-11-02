@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# 编辑器与临时文件
+*.swp
+*~
+*.tmp
+*.bak
+.DS_Store
+
+# 运行时状态与日志（正式位置在 ~/.local/state/herdr-resume/，防误放）
+*.log
+state/
+rstate/
+
+# 本机专用说明与工具配置
+CLAUDE.local.md
+.claude/settings.local.json
+.serena/
+.codegraph/
